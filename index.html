@@ -1,0 +1,365 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draw to 3D Studio</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #10131c;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+header {
+  padding: 22px;
+  text-align: center;
+  background: #191e2b;
+  border-bottom: 1px solid #30384b;
+}
+
+h1 { margin: 0; color: #69a7ff; }
+.subtitle { color: #aab4c8; margin-top: 8px; }
+
+main {
+  max-width: 1200px;
+  margin: auto;
+  padding: 20px;
+}
+
+.drawings {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+.panel, .viewer {
+  background: #1b2130;
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px solid #30384b;
+}
+
+h2 { font-size: 17px; margin-top: 0; }
+
+canvas.drawing {
+  width: 100%;
+  aspect-ratio: 1;
+  background: white;
+  border-radius: 7px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.tools {
+  display: flex;
+  gap: 7px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+button {
+  background: #347ef5;
+  color: white;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+button:hover { background: #5797ff; }
+
+button.secondary { background: #39445a; }
+
+.generate {
+  display: block;
+  margin: 25px auto;
+  padding: 16px 35px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+#threeCanvas {
+  width: 100%;
+  height: 480px;
+  display: block;
+}
+
+.viewer p {
+  color: #aab4c8;
+  text-align: center;
+  font-size: 13px;
+}
+
+@media(max-width: 700px) {
+  .drawings { grid-template-columns: 1fr; }
+  #threeCanvas { height: 350px; }
+}
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+
+<body>
+
+<header>
+  <h1>Draw to 3D Studio</h1>
+  <div class="subtitle">Draw three views. Create your 3D object.</div>
+</header>
+
+<main>
+
+  <div class="drawings">
+
+    <div class="panel">
+      <h2>1. Front View</h2>
+      <canvas class="drawing" id="front"></canvas>
+      <div class="tools">
+        <button onclick="setTool('front','draw')">Draw</button>
+        <button class="secondary" onclick="setTool('front','erase')">Erase</button>
+        <button class="secondary" onclick="clearCanvas('front')">Clear</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>2. Side View</h2>
+      <canvas class="drawing" id="side"></canvas>
+      <div class="tools">
+        <button onclick="setTool('side','draw')">Draw</button>
+        <button class="secondary" onclick="setTool('side','erase')">Erase</button>
+        <button class="secondary" onclick="clearCanvas('side')">Clear</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>3. Top View</h2>
+      <canvas class="drawing" id="top"></canvas>
+      <div class="tools">
+        <button onclick="setTool('top','draw')">Draw</button>
+        <button class="secondary" onclick="setTool('top','erase')">Erase</button>
+        <button class="secondary" onclick="clearCanvas('top')">Clear</button>
+      </div>
+    </div>
+
+  </div>
+
+  <button class="generate" onclick="generate3D()">
+    ✨ Generate 3D Model
+  </button>
+
+  <div class="viewer">
+    <h2>Your 3D Model</h2>
+    <canvas id="threeCanvas"></canvas>
+    <p>Drag to rotate · Scroll to zoom</p>
+  </div>
+
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const SIZE = 48;
+const RES = 128;
+
+const canvasIds = ['front', 'side', 'top'];
+const canvases = {};
+const contexts = {};
+const tools = {};
+
+canvasIds.forEach(id => {
+  const canvas = document.getElementById(id);
+  canvas.width = RES;
+  canvas.height = RES;
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, RES, RES);
+
+  canvases[id] = canvas;
+  contexts[id] = ctx;
+  tools[id] = 'draw';
+
+  let drawing = false;
+
+  function position(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * RES / rect.width,
+      y: (e.clientY - rect.top) * RES / rect.height
+    };
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    drawing = true;
+    canvas.setPointerCapture(e.pointerId);
+    const p = position(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!drawing) return;
+
+    const p = position(e);
+    ctx.lineWidth = tools[id] === 'erase' ? 18 : 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = tools[id] === 'erase' ? 'white' : 'black';
+
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  });
+
+  function stop() { drawing = false; }
+  canvas.addEventListener('pointerup', stop);
+  canvas.addEventListener('pointercancel', stop);
+});
+
+window.setTool = (id, tool) => {
+  tools[id] = tool;
+};
+
+window.clearCanvas = id => {
+  const ctx = contexts[id];
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, RES, RES);
+};
+
+function isDrawn(id, x, y) {
+  const data = contexts[id].getImageData(x, y, 1, 1).data;
+  return data[0] < 150;
+}
+
+// Three.js scene
+const canvas = document.getElementById('threeCanvas');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b2130);
+
+const camera = new THREE.PerspectiveCamera(
+  45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000
+);
+camera.position.set(75, 65, 85);
+
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+
+const light = new THREE.DirectionalLight(0xffffff, 2);
+light.position.set(50, 80, 60);
+scene.add(light);
+
+const grid = new THREE.GridHelper(60, 30, 0x52617b, 0x30384b);
+grid.position.y = -24;
+scene.add(grid);
+
+let model = null;
+
+function resize() {
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height, false);
+}
+
+window.addEventListener('resize', resize);
+resize();
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// Reconstruct the 3D shape using all three silhouettes
+window.generate3D = () => {
+  if (model) {
+    scene.remove(model);
+    model.geometry.dispose();
+    model.material.dispose();
+  }
+
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x4795ff,
+    roughness: 0.45,
+    metalness: 0.15
+  });
+
+  const cubes = [];
+
+  for (let x = 0; x < SIZE; x++) {
+    for (let y = 0; y < SIZE; y++) {
+      for (let z = 0; z < SIZE; z++) {
+
+        const px = Math.floor((x + 0.5) / SIZE * RES);
+        const py = Math.floor((SIZE - 1 - y) / SIZE * RES);
+        const pz = Math.floor((z + 0.5) / SIZE * RES);
+
+        const frontOK = isDrawn('front', px, py);
+        const sideOK = isDrawn('side', pz, py);
+        const topOK = isDrawn('top', px, pz);
+
+        if (frontOK && sideOK && topOK) {
+          cubes.push([x, y, z]);
+        }
+      }
+    }
+  }
+
+  if (cubes.length === 0) {
+    alert('Please draw something in all three boxes first!');
+    return;
+  }
+
+  model = new THREE.InstancedMesh(
+    geometry, material, cubes.length
+  );
+
+  const dummy = new THREE.Object3D();
+
+  cubes.forEach(([x, y, z], i) => {
+    dummy.position.set(
+      x - SIZE / 2,
+      y - SIZE / 2,
+      z - SIZE / 2
+    );
+
+    dummy.updateMatrix();
+    model.setMatrixAt(i, dummy.matrix);
+  });
+
+  model.instanceMatrix.needsUpdate = true;
+  scene.add(model);
+
+  camera.position.set(75, 65, 85);
+  controls.target.set(0, 0, 0);
+  controls.update();
+};
+</script>
+
+</body>
+</html>
